@@ -16,4 +16,9 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface Inject {
+    /**
+     * 根据该名称查找bean
+     * @return
+     */
+    String value();
 }

@@ -31,6 +31,8 @@ public class FileScanner {
      */
     private static final String PROJECT_PATH = System.getProperty("user.dir");
 
+    private static final String DEFAULT_PACKAGE = "com.zc";
+
     /**
      * 包的扫描路径
      */
@@ -93,6 +95,11 @@ public class FileScanner {
         return classes;
     }
 
+    /**
+     * 获取某个包路径中的类
+     * @param packageName
+     * @return
+     */
     private List<Class<?>> getSpecifiedPackageClasses(String packageName) {
         List<Class<?>> classes = new ArrayList<>();
         String packageDir = packageName.replace('.', '/');
@@ -128,6 +135,12 @@ public class FileScanner {
         return null;
     }
 
+    /**
+     * 获取文件类型的class
+     * @param packageName
+     * @param fileDir
+     * @param classes
+     */
     private void findFileClasses(String packageName, String fileDir, List<Class<?>> classes) {
         // 获取此包的目录 建立一个File
         File dir = new File(fileDir);
@@ -156,6 +169,13 @@ public class FileScanner {
         }
     }
 
+    /**
+     * 获取jar包中的class
+     * @param packageName
+     * @param fileDir
+     * @param entries
+     * @param classes
+     */
     private void findJarClasses(String packageName, String fileDir, Enumeration<JarEntry> entries, List<Class<?>> classes) {
         // 同样的进行循环迭代
         while (entries.hasMoreElements()) {
