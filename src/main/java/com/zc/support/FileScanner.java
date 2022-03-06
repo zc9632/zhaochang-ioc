@@ -1,5 +1,6 @@
 package com.zc.support;
 
+import com.zc.annotation.PackageConfiguration;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.CollectionUtils;
 
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+import java.util.stream.Collectors;
 
 /**
  * @author zhaochang.
@@ -36,20 +38,21 @@ public class FileScanner {
      */
     private static List<PackageDefinition> packages;
 
-    static {
+    public FileScanner() {
         initPackages();
     }
 
-    static void initPackages() {
+    private void initPackages() {
+        packages = new ArrayList<>(32);
         // 需要先扫描是否有配置的包路径
         setConfigurePackages();
         // 如果没有则使用默认路径
-        if (CollectionUtils.isEmpty(packages)){
+        if (CollectionUtils.isEmpty(packages)) {
             packages.add(new PackageDefinition(DEFAULT_PACKAGE, true));
         }
     }
 
-    protected static void addPackages(String[] newPackages) {
+    protected void addPackages(String[] newPackages) {
         if (null == newPackages || newPackages.length == 0) {
             return;
         }
@@ -60,7 +63,11 @@ public class FileScanner {
         }
     }
 
-    private static boolean checkPackage(String newPackage) {
+    private boolean checkPackage(String newPackage) {
+        if (CollectionUtils.isEmpty(packages)){
+            // 说明不存在路径所以可以直接添加
+            return true;
+        }
         for (int index = 0; index < packages.size(); index++) {
             PackageDefinition packageDefinition = packages.get(index);
             String packageName = packageDefinition.getPackageName();
@@ -76,9 +83,19 @@ public class FileScanner {
         return true;
     }
 
-    private static void setConfigurePackages() {
-        // todo 需要初始化配置的包路径
-        packages = new ArrayList<>();
+    private void setConfigurePackages() {
+        List<Class<?>> classes = getClasses();
+        if (CollectionUtils.isEmpty(classes)) {
+            log.info("No class found in path:{}", DEFAULT_PACKAGE);
+        }
+        List<Class<?>> list = classes.stream().filter(o -> o.getAnnotation(PackageConfiguration.class) != null).collect(Collectors.toList());
+        if (CollectionUtils.isEmpty(list)) {
+            log.info("no packageConfiguration");
+        }
+        for (Class<?> aClass : list) {
+            PackageConfiguration annotation = aClass.getAnnotation(PackageConfiguration.class);
+            addPackages(annotation.packages());
+        }
     }
 
     /**
@@ -87,11 +104,12 @@ public class FileScanner {
     public List<Class<?>> getClasses() {
         List<Class<?>> classes = new ArrayList<>();
         if (CollectionUtils.isEmpty(packages)) {
-            log.info("未设置需要扫描的路径，使用默认路径");
-        }
-        for (PackageDefinition packageDefinition : packages) {
-            if (packageDefinition.isValid()){
-                classes.addAll(this.getSpecifiedPackageClasses(packageDefinition.getPackageName()));
+            classes.addAll(this.getSpecifiedPackageClasses(DEFAULT_PACKAGE));
+        } else {
+            for (PackageDefinition packageDefinition : packages) {
+                if (packageDefinition.isValid()) {
+                    classes.addAll(this.getSpecifiedPackageClasses(packageDefinition.getPackageName()));
+                }
             }
         }
         return classes;
@@ -99,6 +117,7 @@ public class FileScanner {
 
     /**
      * 获取某个包路径中的类
+     *
      * @param packageName
      * @return
      */
@@ -139,6 +158,7 @@ public class FileScanner {
 
     /**
      * 获取文件类型的class
+     *
      * @param packageName
      * @param fileDir
      * @param classes
@@ -173,6 +193,7 @@ public class FileScanner {
 
     /**
      * 获取jar包中的class
+     *
      * @param packageName
      * @param fileDir
      * @param entries

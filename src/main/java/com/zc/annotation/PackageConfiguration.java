@@ -6,19 +6,14 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-
 /**
  * @author zhaochang.
- * @Date 2022/2/15.
+ * @Date 2022/3/6.
  * @desc
  */
-@Target({ElementType.METHOD, ElementType.CONSTRUCTOR, ElementType.FIELD })
+@Target({ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-public @interface Inject {
-    /**
-     * 根据该名称查找bean
-     * @return
-     */
-    String value() default "";
+public @interface PackageConfiguration {
+    String[] packages();
 }

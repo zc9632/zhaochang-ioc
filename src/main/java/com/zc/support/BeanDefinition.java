@@ -2,6 +2,7 @@ package com.zc.support;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * @author zhaochang.
@@ -9,6 +10,7 @@ import lombok.Data;
  * @desc
  */
 @AllArgsConstructor
+@NoArgsConstructor
 @Data
 public class BeanDefinition {
     /**

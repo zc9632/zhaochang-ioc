@@ -51,14 +51,15 @@ public class ApplicationContext {
         // 初始化工厂
         factory = new DefaultFactory();
         // 初始化需要扫描的包路径
-        FileScanner.addPackages(packages);
+        fileScanner.addPackages(packages);
         // 初始化当前需要扫描的包中的类
         cLasses = fileScanner.getClasses();
-        List<BeanDefinition> beanDefinitions = getNamedAnnotationBeanDefinitions();
+        // 获取有@Named注解的bean
+        List<BeanDefinition> beanDefinitions = this.getNamedAnnotationBeanDefinitions();
         // 初始化beanMap(@Named)
-        initBeanMap(beanDefinitions);
+        this.initBeanMap(beanDefinitions);
         // 初始化注入的bean(@Inject)
-        initInjectedBean(beanDefinitions);
+        this.initInjectedBean(beanDefinitions);
     }
 
     /**
@@ -79,22 +80,26 @@ public class ApplicationContext {
 
     private void injectObject(Field field, BeanDefinition beanDefinition) {
         // 当前类
-        Class<? extends BeanDefinition> aClass = beanDefinition.getClass();
+        Class aClass = beanDefinition.getBeanClass();
         // 当前类对应的bean
         Object classBean = factory.getBean(beanDefinition.getBeanName());
         // 当前属性
         String fieldName = field.getName();
-        // 当前属性对应的set方法名称
-        String setMethodName = "set" + fieldName.substring(0, 1).toLowerCase() + fieldName.substring(1);
-        Inject inject = field.getAnnotation(Inject.class);
-        String beanName = inject.value();
-        // 当前属性类型对应的bean
-        Object bean = factory.getBean(beanName);
         try {
-            if (null != inject) {
-                Class<?> fieldType = field.getType();
+            // 当前属性对应的set方法名称
+            String setMethodName = "set" + fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
+            Inject inject = field.getAnnotation(Inject.class);
+            Class<?> fieldType = field.getType();
+            Method method = aClass.getMethod(setMethodName, fieldType);
+            Inject methodInject = method.getAnnotation(Inject.class);
+            String beanName;
+            if (null != inject || null != methodInject) {
                 // 该字段有注入的注解，需要判断注解里是否有指定的bean名称
-                beanName = inject.value();
+                if (null != inject) {
+                    beanName = inject.value();
+                } else {
+                    beanName = methodInject.value();
+                }
                 if (StringUtils.isEmpty(beanName)) {
                     // 没有手动指定bean名称，使用类型的小写名称
                     String fieldClassName = fieldType.getSimpleName();
@@ -102,16 +107,10 @@ public class ApplicationContext {
                 }
                 if (factory.containsBean(beanName)) {
                     // 获取属性的set方法
-                    Method method = aClass.getMethod(setMethodName, fieldType);
+                    Object bean = factory.getBean(beanName);
                     method.invoke(classBean, bean);
                 } else {
                     throw new BeanNotFoundException("can not inject bean because can not found bean:" + beanName);
-                }
-            } else {
-                // 没有注解，需要找到是否有对应的构造方法加了@Inject注解
-                Method method = beanDefinition.getClass().getMethod(setMethodName, field.getType());
-                if (null != method.getAnnotation(Inject.class)){
-                    method.invoke(classBean, bean);
                 }
             }
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
@@ -159,7 +158,23 @@ public class ApplicationContext {
         return beanDefinitions;
     }
 
-    public void printBeans(){
+    public void printBeans() {
         factory.listBean();
+    }
+
+    /**
+     * 根据类型获取bean
+     *
+     * @param requiredType
+     * @return
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T getBean(Class<T> requiredType) {
+        Object bean = factory.getBean(requiredType);
+        return (T) bean;
+    }
+
+    public Object getBean(String name) {
+        return factory.getBean(name);
     }
 }
