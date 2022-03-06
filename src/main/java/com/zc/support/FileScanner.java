@@ -29,8 +29,6 @@ public class FileScanner {
     /**
      * 当前项目路径
      */
-    private static final String PROJECT_PATH = System.getProperty("user.dir");
-
     private static final String DEFAULT_PACKAGE = "com.zc";
 
     /**
@@ -43,8 +41,12 @@ public class FileScanner {
     }
 
     static void initPackages() {
-        // 需要先扫描是否有配置的包路径，再把手动传入的路径放进去
+        // 需要先扫描是否有配置的包路径
         setConfigurePackages();
+        // 如果没有则使用默认路径
+        if (CollectionUtils.isEmpty(packages)){
+            packages.add(new PackageDefinition(DEFAULT_PACKAGE, true));
+        }
     }
 
     protected static void addPackages(String[] newPackages) {
@@ -75,8 +77,8 @@ public class FileScanner {
     }
 
     private static void setConfigurePackages() {
-        // todo需要初始化配置的包路径
-        packages = new LinkedList<>();
+        // todo 需要初始化配置的包路径
+        packages = new ArrayList<>();
     }
 
     /**
@@ -88,8 +90,8 @@ public class FileScanner {
             log.info("未设置需要扫描的路径，使用默认路径");
         }
         for (PackageDefinition packageDefinition : packages) {
-            if (packageDefinition.isInvalid()){
-                this.getSpecifiedPackageClasses(packageDefinition.getPackageName());
+            if (packageDefinition.isValid()){
+                classes.addAll(this.getSpecifiedPackageClasses(packageDefinition.getPackageName()));
             }
         }
         return classes;
@@ -132,7 +134,7 @@ public class FileScanner {
         } catch (IOException e) {
             log.error("未获取到资源，path:{}, 错误信息:{}", packageDir, e.getMessage());
         }
-        return null;
+        return classes;
     }
 
     /**

@@ -2,7 +2,7 @@ package org.example;
 
 import static org.junit.Assert.assertTrue;
 
-import com.zc.testBean.Student;
+import com.zc.testbean.Student;
 import org.junit.Test;
 
 /**

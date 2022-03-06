@@ -25,7 +25,7 @@ public class PackageDefinition {
         isValid = false;
     }
 
-    public boolean isInvalid() {
+    public boolean isValid() {
         return isValid;
     }
 }
