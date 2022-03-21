@@ -3,9 +3,12 @@ package com.zc;
 import com.zc.support.ApplicationContext;
 import com.zc.test.bean.Student;
 import com.zc.test.configuration.TestConfigurationBean;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.lang.reflect.Field;
 
 /**
  * @author zhaochang.
@@ -54,5 +57,20 @@ public class IocTest {
         ApplicationContext ac = new ApplicationContext();
         TestConfigurationBean bean = ac.getBean(TestConfigurationBean.class);
         Assert.assertNull(bean);
+    }
+
+    @Test
+    public void zcTest() throws IllegalAccessException {
+        ZcTest test = new ZcTest();
+        Field[] fields = test.getClass().getDeclaredFields();
+        fields[0].setAccessible(true);
+        fields[0].set(test, new Student());
+        System.out.println(test);
+    }
+
+    @Data
+    static class ZcTest{
+        private Student student1;
+        private Student student2;
     }
 }

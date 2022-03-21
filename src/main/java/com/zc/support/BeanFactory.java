@@ -13,5 +13,9 @@ public interface BeanFactory {
      */
     Object getBean(String name);
 
-
+    /**
+     * 注册bean
+     * @param beanDefinition
+     */
+    void registerBean(BeanDefinition beanDefinition);
 }

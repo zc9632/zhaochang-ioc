@@ -9,8 +9,6 @@ import lombok.NoArgsConstructor;
  * @Date 2022/2/26.
  * @desc
  */
-@AllArgsConstructor
-@NoArgsConstructor
 @Data
 public class BeanDefinition {
     /**
@@ -26,4 +24,26 @@ public class BeanDefinition {
      */
     private Class beanClass;
 
+    /**
+     * 作用域
+     */
+    private Scope scope;
+
+    public BeanDefinition(String beanName, Object bean, Class beanClass, Scope scope) {
+        this.beanName = beanName;
+        this.bean = bean;
+        this.beanClass = beanClass;
+        this.scope = scope;
+    }
+
+    public BeanDefinition() {
+        this.scope = Scope.SCOPE_PROTOTYPE;
+    }
+
+    public BeanDefinition(String beanName, Object bean, Class beanClass) {
+        this.beanName = beanName;
+        this.bean = bean;
+        this.beanClass = beanClass;
+        this.scope = Scope.SCOPE_PROTOTYPE;
+    }
 }

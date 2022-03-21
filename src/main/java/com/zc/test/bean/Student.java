@@ -2,6 +2,8 @@ package com.zc.test.bean;
 
 import com.zc.annotation.Inject;
 import com.zc.annotation.Named;
+import com.zc.annotation.Singleton;
+import lombok.Data;
 
 /**
  * @author zhaochang.
@@ -9,6 +11,8 @@ import com.zc.annotation.Named;
  * @desc
  */
 @Named
+@Singleton
+@Data
 public class Student {
 
     @Inject
