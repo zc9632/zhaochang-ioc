@@ -2,11 +2,13 @@ package com.zc.support;
 
 import com.zc.annotation.Inject;
 import com.zc.annotation.Named;
+import com.zc.annotation.Singleton;
 import com.zc.exception.BeanNotFoundException;
 import com.zc.exception.BeanRepeatableException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -36,6 +38,15 @@ public class DefaultFactory implements BeanFactory {
     private final Map<Class<?>, String> beanTypeMap = new ConcurrentHashMap<>(64);
 
     private final Set<String> beanNames = new HashSet<>(64);
+
+    private List<Class<?>> customizedAnnotations;
+
+    public DefaultFactory(List<Class<?>> customizedAnnotations) {
+        this.customizedAnnotations = customizedAnnotations;
+    }
+
+    public DefaultFactory() {
+    }
 
     @Override
     public Object getBean(String name) {
@@ -79,7 +90,7 @@ public class DefaultFactory implements BeanFactory {
             // 不包含需要创建并注入对应的属性，注入顺序：1.构造方法 2.字段属性 3.方法注入
             // 先构造方法注入
             instance = this.constructsInject(clazz);
-            if (null == instance){
+            if (null == instance) {
                 try {
                     instance = clazz.newInstance();
                 } catch (InstantiationException | IllegalAccessException e) {
@@ -107,25 +118,27 @@ public class DefaultFactory implements BeanFactory {
             return;
         }
         try {
+            Annotation[][] parameterAnnotations = method.getParameterAnnotations();
             Class<?>[] parameterTypes = method.getParameterTypes();
             if (parameterTypes.length == 0) {
                 return;
             }
             method.setAccessible(true);
-            method.invoke(instance, getMethodParameters(parameterTypes));
+            method.invoke(instance, getMethodParameters(parameterTypes, parameterAnnotations));
         } catch (IllegalAccessException | InvocationTargetException e) {
             e.printStackTrace();
         }
     }
 
-    private List<Object> getMethodParameters(Class<?>[] parameterTypes) {
+    private List<Object> getMethodParameters(Class<?>[] parameterTypes, Annotation[][] parameterAnnotations) {
         List<Object> parameters = new ArrayList<>();
+        int index = 0;
         for (Class<?> parameterType : parameterTypes) {
             Named named = parameterType.getAnnotation(Named.class);
-            if (null == named) {
+            if (!shouldBeInjected(parameterAnnotations[index++], parameterType)) {
                 parameters.add(null);
             } else {
-                if (!StringUtils.isEmpty(named.value())) {
+                if (null != named && !StringUtils.isEmpty(named.value())) {
                     parameters.add(this.getBean(named.value()));
                 } else if (this.containsBean(parameterType)) {
                     parameters.add(this.getBean(parameterType));
@@ -141,19 +154,19 @@ public class DefaultFactory implements BeanFactory {
      * 构造方法注入
      *
      * @param clazz
-     * @param instance
      */
     private Object constructsInject(Class<?> clazz) {
         Constructor<?>[] constructors = clazz.getDeclaredConstructors();
         for (Constructor<?> constructor : constructors) {
             if (constructor.isAnnotationPresent(Inject.class)) {
                 try {
+                    Annotation[][] parameterAnnotations = constructor.getParameterAnnotations();
                     Class<?>[] parameterTypes = constructor.getParameterTypes();
                     if (parameterTypes.length == 0) {
                         return constructor.newInstance();
                     }
                     constructor.setAccessible(true);
-                    return constructor.newInstance(getMethodParameters(parameterTypes));
+                    return constructor.newInstance(getMethodParameters(parameterTypes, parameterAnnotations));
                 } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
                     e.printStackTrace();
                 }
@@ -173,8 +186,8 @@ public class DefaultFactory implements BeanFactory {
         for (Field field : fields) {
             // 如果不为null说明已经通过其它方式注入了
             try {
-                field.setAccessible(true);
-                if (field.get(instance) == null) {
+                if (this.shouldBeInjected(field.getAnnotations(), field.getType()) && field.get(instance) == null) {
+                    field.setAccessible(true);
                     this.injectField(field, instance);
                 }
             } catch (IllegalAccessException e) {
@@ -218,13 +231,10 @@ public class DefaultFactory implements BeanFactory {
                 String fieldBeanName = named.value();
                 if (this.containsBean(fieldBeanName)) {
                     field.set(target, this.getBean(fieldBeanName));
-                } else {
-                    throw new BeanNotFoundException("specified bean not found:" + fieldBeanName);
                 }
-            } else {
-                // 没有@Named注解或未指定名称
-                field.set(target, this.getNewBean(field.getType()));
             }
+            // 没有@Named注解或未指定名称
+            field.set(target, this.getNewBean(field.getType()));
         } catch (IllegalAccessException e) {
             e.printStackTrace();
         }
@@ -234,7 +244,6 @@ public class DefaultFactory implements BeanFactory {
     public void registerBean(BeanDefinition beanDefinition) {
         String beanName = beanDefinition.getBeanName();
         if (this.containsBean(beanName)) {
-            log.warn("you have created same beans defined by same name:{}", beanName);
             return;
         }
         beanDefinitionMap.put(beanName, beanDefinition);
@@ -256,7 +265,19 @@ public class DefaultFactory implements BeanFactory {
             return;
         }
         log.info("Jsr330 all beans:");
-        printBeans(beanDefinitionMap);
+        this.printBeans(beanDefinitionMap);
+    }
+
+    public boolean shouldBeInjected(Annotation[] annotations, Class<?> clazz) {
+        for (Annotation annotation : annotations) {
+            if (annotation.annotationType().equals(Named.class)
+                    || annotation.annotationType().equals(Singleton.class)
+                    || customizedAnnotations.contains(annotation.getClass())
+                    || this.containsBean(clazz)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void printBeans(Map<String, BeanDefinition>... beanDefinitionMaps) {
@@ -266,5 +287,9 @@ public class DefaultFactory implements BeanFactory {
                 log.info(index++ + ".{}:{}", entry.getKey(), entry.getValue());
             }
         }
+    }
+
+    public BeanDefinition getBeanDefinition(Class<?> type) {
+        return beanDefinitionMap.get(beanTypeMap.get(type));
     }
 }

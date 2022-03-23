@@ -22,7 +22,7 @@ public class BeanDefinition {
     /**
      * 每个类对应的class对象
      */
-    private Class beanClass;
+    private Class<?> beanClass;
 
     /**
      * 作用域
