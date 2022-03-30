@@ -127,10 +127,10 @@ public class DefaultFactory implements BeanFactory {
                 e.printStackTrace();
             }
         }
-        // 普通方法注入(放在前面，后面属性注入如果重复会直接覆盖因为后面重复注入会覆盖)
-        methodInject(clazz, instance);
         // 属性注入
         fieldsInject(clazz, instance);
+        // 普通方法注入(放在前面，后面属性注入如果重复会直接覆盖因为后面重复注入会覆盖)
+        methodInject(clazz, instance);
         return instance;
     }
 
@@ -256,7 +256,12 @@ public class DefaultFactory implements BeanFactory {
                 if (!shouldInject) {
                     objects[index] = null;
                 } else if (this.containsBean(parameterType)) {
-                    objects[index] = this.getBean(parameterType);
+                    BeanDefinition childBeanDefinition = this.getChildBeanDefinition(parameterType);
+                    if (null != childBeanDefinition) {
+                        objects[index] = this.getBean(childBeanDefinition.getBeanClass());
+                    } else {
+                        objects[index] = this.getBean(parameterType);
+                    }
                 } else {
                     objects[index] = constructBean(parameterType);
                 }
@@ -291,7 +296,7 @@ public class DefaultFactory implements BeanFactory {
     private boolean isProviderNeedFindChild(Class<?> genericClazz, Annotation[] annotations) {
         for (Annotation annotation : annotations) {
             Class<? extends Annotation> type = annotation.annotationType();
-            if (type.equals(Named.class) || customizedAnnotations.contains(type)){
+            if (type.equals(Named.class) || customizedAnnotations.contains(type)) {
                 return true;
             }
         }
@@ -306,7 +311,7 @@ public class DefaultFactory implements BeanFactory {
                 return true;
             }
         }
-        if (genericClazz.isAnnotationPresent(Singleton.class)){
+        if (genericClazz.isAnnotationPresent(Singleton.class)) {
             return false;
         }
         switch (classEnum) {
@@ -444,7 +449,7 @@ public class DefaultFactory implements BeanFactory {
         // 如果不为null说明已经通过其它方式注入了
         try {
             field.setAccessible(true);
-            if (this.shouldBeInjected(field.getAnnotations(), field.getType()) && field.get(instance) == null) {
+            if (this.shouldBeInjected(field.getAnnotations(), field.getType())) {
                 Named named = field.getAnnotation(Named.class);
                 if (null != named && StringUtils.isEmpty(named.value())) {
                     // @Named注解中指定了bean名称
@@ -541,7 +546,7 @@ public class DefaultFactory implements BeanFactory {
                 Class<?> genericClazz = (Class<?>) parameterizedType.getActualTypeArguments()[0];
                 field.setAccessible(true);
                 DefaultProvider<Object> provider = new DefaultProvider<>(this, getProviderTypeName(genericClazz, null));
-                if (genericClazz.isAnnotationPresent(Singleton.class)){
+                if (genericClazz.isAnnotationPresent(Singleton.class)) {
                     provider.setNeedNewBean(false);
                 }
                 field.set(instance, provider);
