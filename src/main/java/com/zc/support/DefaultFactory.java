@@ -16,7 +16,6 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -284,7 +283,7 @@ public class DefaultFactory implements BeanFactory {
                 Class<?> genericClazz = (Class<?>) parameterizedType.getActualTypeArguments()[0];
                 DefaultProvider<Object> provider = new DefaultProvider<>(this, getProviderTypeName(genericClazz, annotations));
                 boolean isProviderNeedNewBean = this.isProviderNeedNewBean(genericClazz, classEnum, annotations);
-                boolean isProviderNeedFindChild = this.isProviderNeedFindChild(genericClazz, annotations);
+                boolean isProviderNeedFindChild = this.isHasCustomizedAnnotation(annotations);
                 provider.setNeedNewBean(isProviderNeedNewBean);
                 provider.setNeedNewBean(isProviderNeedFindChild);
                 return provider;
@@ -293,7 +292,7 @@ public class DefaultFactory implements BeanFactory {
         return null;
     }
 
-    private boolean isProviderNeedFindChild(Class<?> genericClazz, Annotation[] annotations) {
+    private boolean isHasCustomizedAnnotation(Annotation[] annotations) {
         for (Annotation annotation : annotations) {
             Class<? extends Annotation> type = annotation.annotationType();
             if (type.equals(Named.class) || customizedAnnotations.contains(type)) {
@@ -459,7 +458,14 @@ public class DefaultFactory implements BeanFactory {
                     }
                 } else {
                     // 没有@Named注解或未指定名称
-                    field.set(instance, this.constructBean(field.getType()));
+                    if (this.isHasCustomizedAnnotation(field.getAnnotations())){
+                        BeanDefinition childBeanDefinition = this.getChildBeanDefinition(field.getType());
+                        if (null != childBeanDefinition) {
+                            field.set(instance, this.constructBean(childBeanDefinition.getBeanClass()));
+                        }
+                    } else {
+                        field.set(instance, this.constructBean(field.getType()));
+                    }
                 }
             }
         } catch (IllegalAccessException e) {
