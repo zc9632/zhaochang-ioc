@@ -1,14 +1,28 @@
 package com.zc;
 
+import com.zc.annotation.Inject;
+import com.zc.annotation.Provider;
 import com.zc.support.ApplicationContext;
+import com.zc.support.DefaultFactory;
+import com.zc.support.DefaultProvider;
+import com.zc.test.bean.Action;
 import com.zc.test.bean.Student;
+import com.zc.test.bean.tck.auto.Engine;
+import com.zc.test.bean.tck.auto.Seat;
+import com.zc.test.bean.tck.auto.V8Engine;
+import com.zc.test.bean.tck.auto.accessories.Cupholder;
+import com.zc.test.bean.tck.auto.accessories.SpareTire;
 import com.zc.test.configuration.TestConfigurationBean;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.lang.reflect.Field;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Type;
 
 /**
  * @author zhaochang.
@@ -60,12 +74,11 @@ public class IocTest {
     }
 
     @Test
-    public void zcTest() throws IllegalAccessException {
-        ZcTest test = new ZcTest();
-        Field[] fields = test.getClass().getDeclaredFields();
-        fields[0].setAccessible(true);
-        fields[0].set(test, new Student());
-        System.out.println(test);
+    public void zcTest() throws InvocationTargetException, InstantiationException, IllegalAccessException, NoSuchMethodException {
+        Object instance = SpareTire.class.getDeclaredConstructors()[0].newInstance(null, null);
+        Method injectPublicMethod = SpareTire.class.getSuperclass().getDeclaredMethod("injectPublicMethod");
+        injectPublicMethod.setAccessible(true);
+        injectPublicMethod.invoke(instance);
     }
 
     @Data
@@ -73,4 +86,6 @@ public class IocTest {
         private Student student1;
         private Student student2;
     }
+
+
 }

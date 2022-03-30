@@ -14,6 +14,13 @@ public interface BeanFactory {
     Object getBean(String name);
 
     /**
+     * 根据类型获取bean
+     * @param classType
+     * @return
+     */
+    Object getBean(Class<?> classType);
+
+    /**
      * 注册bean
      * @param beanDefinition
      */

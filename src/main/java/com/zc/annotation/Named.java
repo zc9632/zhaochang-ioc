@@ -11,7 +11,7 @@ import java.lang.annotation.Target;
  * @Date 2022/2/15.
  * @desc
  */
-@Target({ElementType.TYPE, ElementType.PARAMETER})
+@Target({ElementType.TYPE, ElementType.PARAMETER, ElementType.FIELD})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface Named {

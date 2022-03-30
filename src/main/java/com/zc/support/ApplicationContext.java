@@ -10,7 +10,6 @@ import org.springframework.util.CollectionUtils;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -82,7 +81,6 @@ public class ApplicationContext {
     }
 
     private void initBeans(List<BeanDefinition> beanDefinitions) {
-        // 首先把找到的类转为BeanDefinition数据结构
         for (BeanDefinition beanDefinition : beanDefinitions) {
             factory.registerBean(beanDefinition);
         }
@@ -94,25 +92,34 @@ public class ApplicationContext {
     }
 
     private void initBean(BeanDefinition beanDefinition, List<BeanDefinition> hasInit) {
+        if (hasInit.contains(beanDefinition)){
+            return;
+        }
         Class<?> beanClass = beanDefinition.getBeanClass();
         Field[] fields = beanClass.getDeclaredFields();
         for (Field field : fields) {
-            field.setAccessible(true);
             try {
+                field.setAccessible(true);
+                if (null != field.get(beanDefinition.getBean())){
+                    continue;
+                }
+                if (factory.checkProvider(field, beanDefinition.getBean())) {
+                    // 校验是否是provider修饰的
+                    continue;
+                }
                 Class<?> type = field.getType();
                 if (factory.containsBean(type)) {
                     // 如果bean容器存在该类型
                     if (!hasInit.contains(factory.getBeanDefinition(type))) {
-                        // 存在没有初始化
+                        // 存在没有初始化则先初始化，然后赋值
                         initBean(factory.getBeanDefinition(type), hasInit);
-                    } else {
-                        // 存在且已经初始化
-                        field.set(beanDefinition.getBean(), factory.getBean(type));
+
                     }
+                    field.set(beanDefinition.getBean(), factory.getBean(type));
                 } else {
                     // 不存在，检查是否有可以被初始化的注解@Named或自定义注解
                     if (factory.shouldBeInjected(field.getAnnotations(), type)) {
-                        field.set(beanDefinition.getBean(), factory.getNewBean(type));
+                        field.set(beanDefinition.getBean(), factory.constructBean(type));
                     }
                 }
             } catch (IllegalAccessException e) {
@@ -137,27 +144,32 @@ public class ApplicationContext {
         for (Class<?> clazz : classes) {
             Annotation[] annotations = clazz.getDeclaredAnnotations();
             if (factory.shouldBeInjected(annotations, clazz)) {
-                beanDefinitions.add(this.toBeanDefinition(clazz));
+                beanDefinitions.add(this.toCompleteBeanDefinition(clazz, null));
             }
         }
         return beanDefinitions;
     }
 
-    private BeanDefinition toBeanDefinition(Class<?> clazz) {
-        Named namedAnnotation = clazz.getAnnotation(Named.class);
-        // 有该注解，查看是否有自定义的bean名称，没有使用类名首字母小写
-        String simpleName = clazz.getSimpleName();
-        String beanName = simpleName.substring(0, 1).toLowerCase() + simpleName.substring(1);
-        if (null != namedAnnotation && !StringUtils.isEmpty(namedAnnotation.value())) {
-            // 有自定义注解名称
-            beanName = namedAnnotation.value();
+    /**
+     * 用于自动给扫描的bean
+     *
+     * @param clazz
+     * @param beanName
+     * @return
+     */
+    private BeanDefinition toBeanDefinition(Class<?> clazz, String beanName) {
+        if (StringUtils.isEmpty(beanName)) {
+            Named namedAnnotation = clazz.getAnnotation(Named.class);
+            // 有该注解，查看是否有自定义的bean名称，没有使用类名首字母小写
+            String simpleName = clazz.getSimpleName();
+            beanName = simpleName.substring(0, 1).toLowerCase() + simpleName.substring(1);
+            if (null != namedAnnotation && !StringUtils.isEmpty(namedAnnotation.value())) {
+                // 有自定义注解名称
+                beanName = namedAnnotation.value();
+            }
         }
         BeanDefinition beanDefinition = null;
-        try {
-            beanDefinition = new BeanDefinition(beanName, clazz.newInstance(), clazz);
-        } catch (InstantiationException | IllegalAccessException e) {
-            e.printStackTrace();
-        }
+        beanDefinition = new BeanDefinition(beanName, factory.constructBean(clazz), clazz);
         Singleton singleton = clazz.getAnnotation(Singleton.class);
         if (null != singleton) {
             // 设置作用域为单例
@@ -165,6 +177,35 @@ public class ApplicationContext {
         }
         return beanDefinition;
     }
+
+    /**
+     * 用于手动注册的bean
+     *
+     * @param clazz
+     * @param beanName
+     * @return
+     */
+    private BeanDefinition toCompleteBeanDefinition(Class<?> clazz, String beanName) {
+        if (StringUtils.isEmpty(beanName)) {
+            Named namedAnnotation = clazz.getAnnotation(Named.class);
+            // 有该注解，查看是否有自定义的bean名称，没有使用类名首字母小写
+            String simpleName = clazz.getSimpleName();
+            beanName = simpleName.substring(0, 1).toLowerCase() + simpleName.substring(1);
+            if (null != namedAnnotation && !StringUtils.isEmpty(namedAnnotation.value())) {
+                // 有自定义注解名称
+                beanName = namedAnnotation.value();
+            }
+        }
+        BeanDefinition beanDefinition = null;
+        beanDefinition = new BeanDefinition(beanName, factory.constructBean(clazz), clazz);
+        Singleton singleton = clazz.getAnnotation(Singleton.class);
+        if (null != singleton) {
+            // 设置作用域为单例
+            beanDefinition.setScope(Scope.SCOPE_SINGLETON);
+        }
+        return beanDefinition;
+    }
+
 
     public void printBeans() {
         factory.listBean();
@@ -182,11 +223,20 @@ public class ApplicationContext {
         return (T) bean;
     }
 
-    public void register(Class<?> beanClass) {
-        BeanDefinition beanDefinition = this.toBeanDefinition(beanClass);
-        if (factory.containsBean(beanDefinition.getBeanName())) {
+    public void registerBean(Class<?> beanClass) {
+        if (factory.containsBean(beanClass)) {
             return;
         } else {
+            BeanDefinition beanDefinition = this.toCompleteBeanDefinition(beanClass, null);
+            factory.registerBean(beanDefinition);
+        }
+    }
+
+    public void registerBean(Class<?> beanClass, String beanName) {
+        if (factory.containsBean(beanClass)) {
+            return;
+        } else {
+            BeanDefinition beanDefinition = this.toCompleteBeanDefinition(beanClass, beanName);
             factory.registerBean(beanDefinition);
         }
     }

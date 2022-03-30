@@ -2,9 +2,8 @@ package com.zc.support;
 
 import com.zc.annotation.Inject;
 import com.zc.annotation.Named;
+import com.zc.annotation.Provider;
 import com.zc.annotation.Singleton;
-import com.zc.exception.BeanNotFoundException;
-import com.zc.exception.BeanRepeatableException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
@@ -13,7 +12,11 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -53,12 +56,32 @@ public class DefaultFactory implements BeanFactory {
         return getBeanByName(name);
     }
 
+    @Override
     public Object getBean(Class<?> requiredType) {
-        String beanName = "";
+        String beanName = checkInterface(requiredType);
         if (beanTypeMap.containsKey(requiredType)) {
             beanName = beanTypeMap.get(requiredType);
         }
         return getBeanByName(beanName);
+    }
+
+    private String checkInterface(Class<?> requiredType) {
+        if (requiredType.isInterface()) {
+            // 需要获取他的实现类
+            for (BeanDefinition beanDefinition : beanDefinitionMap.values()) {
+                Class<?>[] interfaces = beanDefinition.getBeanClass().getInterfaces();
+                for (Class<?> anInterface : interfaces) {
+                    if (anInterface.equals(requiredType)) {
+                        return beanDefinition.getBeanName();
+                    }
+                }
+            }
+        }
+        return "";
+    }
+
+    public BeanDefinition getBeanDefinition(String name) {
+        return beanDefinitionMap.get(name);
     }
 
     private Object getBeanByName(String beanName) {
@@ -70,7 +93,7 @@ public class DefaultFactory implements BeanFactory {
                 bean = beanDefinition.getBean();
             } else if (beanDefinition.getScope().equals(Scope.SCOPE_PROTOTYPE)) {
                 // 这里由于是多例所以需要递归出所有的属性并创建对象
-                bean = getNewBean(beanDefinition.getBeanClass());
+                bean = constructBean(beanDefinition.getBeanClass());
             }
         }
         if (null == bean) {
@@ -79,7 +102,7 @@ public class DefaultFactory implements BeanFactory {
         return bean;
     }
 
-    public Object getNewBean(Class<?> clazz) {
+    public Object constructBean(Class<?> clazz) {
         Object instance = null;
         // 需要返回的对象实例,不是单例直接返回新实例
         Object bean = this.containsSingletonBean(clazz);
@@ -87,30 +110,125 @@ public class DefaultFactory implements BeanFactory {
             // 由于是递归所以需要考虑深度递归后可能会有单例bean
             return bean;
         } else {
-            // 不包含需要创建并注入对应的属性，注入顺序：1.构造方法 2.字段属性 3.方法注入
-            // 先构造方法注入
-            instance = this.constructsInject(clazz);
-            if (null == instance) {
-                try {
-                    instance = clazz.newInstance();
-                } catch (InstantiationException | IllegalAccessException e) {
-                    e.printStackTrace();
-                }
-            }
-            // 普通方法注入(放在前面，后面属性注入如果重复会直接覆盖因为后面重复注入会覆盖)
-            methodInject(clazz, instance);
-            // 属性注入
-            fieldsInject(clazz, instance);
-            return instance;
+            instance = getNewBean(clazz);
         }
+        return instance;
+    }
+
+    public Object getNewBean(Class<?> clazz) {
+        Object instance = null;
+        // 不包含需要创建并注入对应的属性，注入顺序：1.构造方法 2.字段属性 3.方法注入
+        // 先构造方法注入
+        instance = this.constructsInject(clazz);
+        if (null == instance) {
+            try {
+                instance = clazz.newInstance();
+            } catch (InstantiationException | IllegalAccessException e) {
+                e.printStackTrace();
+            }
+        }
+        // 普通方法注入(放在前面，后面属性注入如果重复会直接覆盖因为后面重复注入会覆盖)
+        methodInject(clazz, instance);
+        // 属性注入
+        fieldsInject(clazz, instance);
+        return instance;
     }
 
     private void methodInject(Class<?> clazz, Object instance) {
+        // 先执行父类的方法
+        this.parentMethodsInject(clazz, instance);
+//        List<Method> overrideMethods = getParentOverrideMethods(clazz);
         Method[] methods = clazz.getDeclaredMethods();
         for (Method method : methods) {
+//            if (method.isAnnotationPresent(Inject.class)) {
+//                // 当有注解的时候先查父类，否则不管父类
+//                Method parentMethod = getParentMethod(method, clazz);
+//                if (null != parentMethod){
+//                    int modifiers = method.getModifiers();
+//                    if (!Modifier.isPublic(modifiers) && !Modifier.isAbstract(modifiers) && !Modifier.isPrivate(modifiers)){
+//                        this.injectMethod(parentMethod, instance);
+//                    }
+//                }
+//            }
             // 如果不为null说明已经通过其它方式注入了
             this.injectMethod(method, instance);
         }
+    }
+
+    private Method getParentMethod(Method method, Class<?> clazz) {
+        Method[] parentDeclaredMethods = clazz.getSuperclass().getDeclaredMethods();
+        for (Method pMethod : parentDeclaredMethods) {
+            if (pMethod.getName().equals(method.getName()) && pMethod.getReturnType().equals(method.getReturnType())) {
+                Class<?>[] pTypes = pMethod.getParameterTypes();
+                Class<?>[] cTypes = method.getParameterTypes();
+                if (pTypes.length == cTypes.length) {
+                    boolean isEqual = true;
+                    for (int i = 0; i < pTypes.length; i++) {
+                        if (!pTypes[i].equals(cTypes[i])) {
+                            isEqual = false;
+                            break;
+                        }
+                    }
+                    if (isEqual) {
+                        return pMethod;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private void parentMethodsInject(Class<?> clazz, Object instance) {
+        Class<?> superclass = clazz.getSuperclass();
+        if (null == superclass || superclass.equals(Object.class)) {
+            return;
+        }
+        // 暂时不确实是否只执行子类
+        List<Method> overrideMethods = getParentOverrideMethods(clazz);
+        Method[] methods = superclass.getDeclaredMethods();
+        for (Method method : methods) {
+            int modifiers = method.getModifiers();
+            if (overrideMethods.contains(method) && Modifier.isPublic(modifiers)) {
+                continue;
+            }
+            if (!Modifier.isProtected(modifiers)) {
+                this.injectMethod(method, instance);
+            }
+        }
+    }
+
+    /**
+     * 获取被重写的方法
+     *
+     * @param clazz
+     * @return
+     */
+    private List<Method> getParentOverrideMethods(Class<?> clazz) {
+        List<Method> methods = new ArrayList<>();
+        Method[] declaredMethods = clazz.getDeclaredMethods();
+        Method[] parentDeclaredMethods = clazz.getSuperclass().getDeclaredMethods();
+        for (Method pMethod : parentDeclaredMethods) {
+            for (Method cMethod : declaredMethods) {
+                if (pMethod.getName().equals(cMethod.getName()) && pMethod.getReturnType().equals(cMethod.getReturnType())) {
+                    Class<?>[] pTypes = pMethod.getParameterTypes();
+                    Class<?>[] cTypes = cMethod.getParameterTypes();
+                    if (pTypes.length == cTypes.length) {
+                        boolean isEqual = true;
+                        for (int i = 0; i < pTypes.length; i++) {
+                            if (!pTypes[i].equals(cTypes[i])) {
+                                isEqual = false;
+                                break;
+                            }
+                        }
+                        if (isEqual) {
+                            methods.add(pMethod);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        return methods;
     }
 
     private void injectMethod(Method method, Object instance) {
@@ -119,35 +237,126 @@ public class DefaultFactory implements BeanFactory {
         }
         try {
             Annotation[][] parameterAnnotations = method.getParameterAnnotations();
+            Type[] genericParameterTypes = method.getGenericParameterTypes();
             Class<?>[] parameterTypes = method.getParameterTypes();
-            if (parameterTypes.length == 0) {
-                return;
-            }
             method.setAccessible(true);
-            method.invoke(instance, getMethodParameters(parameterTypes, parameterAnnotations));
+            method.invoke(instance, getMethodParameters(parameterTypes, genericParameterTypes, parameterAnnotations, ClassEnum.METHOD));
         } catch (IllegalAccessException | InvocationTargetException e) {
             e.printStackTrace();
         }
     }
 
-    private List<Object> getMethodParameters(Class<?>[] parameterTypes, Annotation[][] parameterAnnotations) {
-        List<Object> parameters = new ArrayList<>();
+    private Object[] getMethodParameters(Class<?>[] parameterTypes, Type[] genericParameterTypes, Annotation[][] parameterAnnotations, ClassEnum classEnum) {
+        Object[] objects = new Object[parameterTypes.length];
         int index = 0;
         for (Class<?> parameterType : parameterTypes) {
-            Named named = parameterType.getAnnotation(Named.class);
-            if (!shouldBeInjected(parameterAnnotations[index++], parameterType)) {
-                parameters.add(null);
-            } else {
-                if (null != named && !StringUtils.isEmpty(named.value())) {
-                    parameters.add(this.getBean(named.value()));
+            boolean shouldInject = shouldBeInjected(parameterAnnotations[index], parameterType);
+            DefaultProvider<Object> provider = checkProvider(parameterType, genericParameterTypes[index], classEnum, parameterAnnotations[index]);
+            if (null == provider) {
+                if (!shouldInject) {
+                    objects[index] = null;
                 } else if (this.containsBean(parameterType)) {
-                    parameters.add(this.getBean(parameterType));
+                    objects[index] = this.getBean(parameterType);
                 } else {
-                    parameters.add(getNewBean(parameterType));
+                    objects[index] = constructBean(parameterType);
+                }
+            } else {
+//                // 如果包含
+//                if (shouldInject){
+//                    provider.setNeedNewBean(true);
+//                }
+                objects[index] = provider;
+            }
+            index++;
+        }
+        return objects;
+    }
+
+    private DefaultProvider<Object> checkProvider(Class<?> parameterType, Type genericParameterType, ClassEnum classEnum, Annotation[] annotations) {
+        if (parameterType.equals(Provider.class)) {
+            if (genericParameterType instanceof ParameterizedType) {
+                ParameterizedType parameterizedType = (ParameterizedType) genericParameterType;
+                Class<?> genericClazz = (Class<?>) parameterizedType.getActualTypeArguments()[0];
+                DefaultProvider<Object> provider = new DefaultProvider<>(this, getProviderTypeName(genericClazz, annotations));
+                boolean isProviderNeedNewBean = this.isProviderNeedNewBean(genericClazz, classEnum, annotations);
+                boolean isProviderNeedFindChild = this.isProviderNeedFindChild(genericClazz, annotations);
+                provider.setNeedNewBean(isProviderNeedNewBean);
+                provider.setNeedNewBean(isProviderNeedFindChild);
+                return provider;
+            }
+        }
+        return null;
+    }
+
+    private boolean isProviderNeedFindChild(Class<?> genericClazz, Annotation[] annotations) {
+        for (Annotation annotation : annotations) {
+            Class<? extends Annotation> type = annotation.annotationType();
+            if (type.equals(Named.class) || customizedAnnotations.contains(type)){
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isProviderNeedNewBean(Class<?> genericClazz, ClassEnum classEnum, Annotation[] annotations) {
+        // 先判断是否有注入的注解，有的话不考虑范型是否是单例
+        for (Annotation annotation : annotations) {
+            Class<? extends Annotation> annotationType = annotation.annotationType();
+            if (annotationType.equals(Named.class) || customizedAnnotations.contains(annotationType)) {
+                return true;
+            }
+        }
+        if (genericClazz.isAnnotationPresent(Singleton.class)){
+            return false;
+        }
+        switch (classEnum) {
+            case METHOD:
+                if (checkCircularlyDependentSingletons(genericClazz)) {
+                    return false;
+                }
+                break;
+            default:
+                break;
+        }
+        return true;
+    }
+
+    /**
+     * 检查provider中的类型是否有单例循环依赖
+     *
+     * @param genericClazz
+     * @return
+     */
+    private boolean checkCircularlyDependentSingletons(Class<?> genericClazz) {
+        if (!genericClazz.isAnnotationPresent(Singleton.class)) {
+            return false;
+        }
+        Field[] declaredFields = genericClazz.getDeclaredFields();
+        for (Field declaredField : declaredFields) {
+            Class<?> type = declaredField.getType();
+            if (!type.isAnnotationPresent(Singleton.class)) {
+                continue;
+            }
+            Field[] typeDeclaredFields = type.getDeclaredFields();
+            for (Field typeDeclaredField : typeDeclaredFields) {
+                Class<?> parameterType = typeDeclaredField.getType();
+                Type genericType = typeDeclaredField.getGenericType();
+                if (parameterType.equals(Provider.class)) {
+                    if (genericType instanceof ParameterizedType) {
+                        ParameterizedType parameterizedType = (ParameterizedType) genericType;
+                        Class<?> genericClazz1 = (Class<?>) parameterizedType.getActualTypeArguments()[0];
+                        if (genericClazz1.equals(genericClazz)) {
+                            return true;
+                        }
+                    }
+                } else {
+                    if (parameterType.equals(genericClazz)) {
+                        return true;
+                    }
                 }
             }
         }
-        return parameters;
+        return false;
     }
 
     /**
@@ -161,12 +370,13 @@ public class DefaultFactory implements BeanFactory {
             if (constructor.isAnnotationPresent(Inject.class)) {
                 try {
                     Annotation[][] parameterAnnotations = constructor.getParameterAnnotations();
+                    Type[] genericParameterTypes = constructor.getGenericParameterTypes();
                     Class<?>[] parameterTypes = constructor.getParameterTypes();
-                    if (parameterTypes.length == 0) {
+                    if (genericParameterTypes.length == 0) {
                         return constructor.newInstance();
                     }
                     constructor.setAccessible(true);
-                    return constructor.newInstance(getMethodParameters(parameterTypes, parameterAnnotations));
+                    return constructor.newInstance(getMethodParameters(parameterTypes, genericParameterTypes, parameterAnnotations, ClassEnum.CONSTRUCTOR));
                 } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
                     e.printStackTrace();
                 }
@@ -182,17 +392,22 @@ public class DefaultFactory implements BeanFactory {
      * @param instance
      */
     private void fieldsInject(Class<?> clazz, Object instance) {
+        // 先注入父类属性
+        parentFieldsInject(clazz, instance);
         Field[] fields = clazz.getDeclaredFields();
         for (Field field : fields) {
-            // 如果不为null说明已经通过其它方式注入了
-            try {
-                if (this.shouldBeInjected(field.getAnnotations(), field.getType()) && field.get(instance) == null) {
-                    field.setAccessible(true);
-                    this.injectField(field, instance);
-                }
-            } catch (IllegalAccessException e) {
-                e.printStackTrace();
-            }
+            this.injectField(field, instance);
+        }
+    }
+
+    private void parentFieldsInject(Class<?> clazz, Object instance) {
+        Class<?> superclass = clazz.getSuperclass();
+        if (null == superclass) {
+            return;
+        }
+        Field[] fields = superclass.getDeclaredFields();
+        for (Field field : fields) {
+            injectField(field, instance);
         }
     }
 
@@ -208,7 +423,7 @@ public class DefaultFactory implements BeanFactory {
         }
         BeanDefinition beanDefinition = beanDefinitionMap.get(beanTypeMap.get(clazz));
         if (beanDefinition.getScope().equals(Scope.SCOPE_SINGLETON)) {
-            return beanDefinition;
+            return beanDefinition.getBean();
         }
         return null;
     }
@@ -219,25 +434,33 @@ public class DefaultFactory implements BeanFactory {
      * @param field  属性
      * @param target 该属性的实例
      */
-    public void injectField(Field field, Object target) {
+    public void injectField(Field field, Object instance) {
         if (!field.isAnnotationPresent(Inject.class)) {
             return;
         }
-        field.setAccessible(true);
-        Named named = field.getAnnotation(Named.class);
+        if (checkProvider(field, instance)) {
+            return;
+        }
+        // 如果不为null说明已经通过其它方式注入了
         try {
-            if (null != named && StringUtils.isEmpty(named.value())) {
-                // @Named注解中指定了bean名称
-                String fieldBeanName = named.value();
-                if (this.containsBean(fieldBeanName)) {
-                    field.set(target, this.getBean(fieldBeanName));
+            field.setAccessible(true);
+            if (this.shouldBeInjected(field.getAnnotations(), field.getType()) && field.get(instance) == null) {
+                Named named = field.getAnnotation(Named.class);
+                if (null != named && StringUtils.isEmpty(named.value())) {
+                    // @Named注解中指定了bean名称
+                    String fieldBeanName = named.value();
+                    if (this.containsBean(fieldBeanName)) {
+                        field.set(instance, this.getBean(fieldBeanName));
+                    }
+                } else {
+                    // 没有@Named注解或未指定名称
+                    field.set(instance, this.constructBean(field.getType()));
                 }
             }
-            // 没有@Named注解或未指定名称
-            field.set(target, this.getNewBean(field.getType()));
         } catch (IllegalAccessException e) {
             e.printStackTrace();
         }
+
     }
 
     @Override
@@ -272,7 +495,7 @@ public class DefaultFactory implements BeanFactory {
         for (Annotation annotation : annotations) {
             if (annotation.annotationType().equals(Named.class)
                     || annotation.annotationType().equals(Singleton.class)
-                    || customizedAnnotations.contains(annotation.getClass())
+                    || customizedAnnotations.contains(annotation.annotationType())
                     || this.containsBean(clazz)) {
                 return true;
             }
@@ -291,5 +514,104 @@ public class DefaultFactory implements BeanFactory {
 
     public BeanDefinition getBeanDefinition(Class<?> type) {
         return beanDefinitionMap.get(beanTypeMap.get(type));
+    }
+
+    public String getBeanNameByClass(Class clazz) {
+        return beanTypeMap.get(clazz);
+    }
+
+    public boolean checkProvider(Field field, Object instance) {
+        if (field.getType().equals(Provider.class)) {
+            initProvider(field, instance);
+            return true;
+        }
+        return false;
+    }
+
+    private void initProvider(Field field, Object instance) {
+        Type genericType = field.getGenericType();
+        try {
+            field.setAccessible(true);
+//            if (null != field.get(instance)) {
+//                // 如果已经初始化直接返回
+//                return;
+//            }
+            if (genericType instanceof ParameterizedType) {
+                ParameterizedType parameterizedType = (ParameterizedType) genericType;
+                Class<?> genericClazz = (Class<?>) parameterizedType.getActualTypeArguments()[0];
+                field.setAccessible(true);
+                DefaultProvider<Object> provider = new DefaultProvider<>(this, getProviderTypeName(genericClazz, null));
+                if (genericClazz.isAnnotationPresent(Singleton.class)){
+                    provider.setNeedNewBean(false);
+                }
+                field.set(instance, provider);
+            }
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private String getProviderTypeName(Class<?> genericClazz, Annotation[] annotations) {
+        String beanName = "";
+        if (null != annotations) {
+            for (Annotation annotation : annotations) {
+                if (annotation.annotationType().equals(Named.class)) {
+                    String name = ((Named) annotation).value();
+                    if (!StringUtils.isEmpty(name)) {
+                        return name;
+                    }
+                }
+            }
+        }
+        // 首先检查是否有provider里的类型的bean
+        if (this.containsBean(genericClazz)) {
+            return this.getBeanNameByClass(genericClazz);
+        }
+        // 如果没有再检查目前map中是否有类是否有是该类型子类的bean
+        Set<Class<?>> classes = beanTypeMap.keySet();
+        for (Class<?> clazz : classes) {
+            if (isChild(clazz, genericClazz)) {
+                return getProviderTypeName(clazz, null);
+            }
+        }
+        String simpleName = genericClazz.getSimpleName();
+        beanName = simpleName.substring(0, 1).toLowerCase() + simpleName.substring(1);
+        return beanName;
+    }
+
+    private boolean isChild(Class<?> clazz, Class<?> genericClazz) {
+        Class<?> clazzCopy = clazz;
+        boolean isChild = false;
+        while (true) {
+            Class<?> superclass = clazzCopy.getSuperclass();
+            if (null == superclass) {
+                // 父类是null
+                break;
+            } else if (superclass.equals(genericClazz)) {
+                // 父类不是是null且是指定类型的子类
+                isChild = true;
+                break;
+            } else {
+                // 不是子类
+                clazzCopy = superclass;
+            }
+        }
+        return isChild;
+    }
+
+    public BeanDefinition getChildBeanDefinition(Class<?> beanClass) {
+        for (BeanDefinition beanDefinition : beanDefinitionMap.values()) {
+            Class<?> superclass = beanDefinition.getBeanClass().getSuperclass();
+            while (true) {
+                if (null == superclass) {
+                    break;
+                }
+                if (superclass.equals(beanClass)) {
+                    return beanDefinition;
+                }
+                superclass = superclass.getSuperclass();
+            }
+        }
+        return null;
     }
 }
