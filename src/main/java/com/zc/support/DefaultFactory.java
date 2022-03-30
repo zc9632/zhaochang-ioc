@@ -126,16 +126,18 @@ public class DefaultFactory implements BeanFactory {
                 e.printStackTrace();
             }
         }
+        // 先注入父类属性
+        this.parentFieldsInject(clazz, instance);
+        // 先执行父类的方法
+        this.parentMethodsInject(clazz, instance);
         // 属性注入
-        fieldsInject(clazz, instance);
+        this.fieldsInject(clazz, instance);
         // 普通方法注入(放在前面，后面属性注入如果重复会直接覆盖因为后面重复注入会覆盖)
-        methodInject(clazz, instance);
+        this.methodInject(clazz, instance);
         return instance;
     }
 
     private void methodInject(Class<?> clazz, Object instance) {
-        // 先执行父类的方法
-        this.parentMethodsInject(clazz, instance);
 //        List<Method> overrideMethods = getParentOverrideMethods(clazz);
         Method[] methods = clazz.getDeclaredMethods();
         for (Method method : methods) {
@@ -396,8 +398,6 @@ public class DefaultFactory implements BeanFactory {
      * @param instance
      */
     private void fieldsInject(Class<?> clazz, Object instance) {
-        // 先注入父类属性
-        parentFieldsInject(clazz, instance);
         Field[] fields = clazz.getDeclaredFields();
         for (Field field : fields) {
             this.injectField(field, instance);
