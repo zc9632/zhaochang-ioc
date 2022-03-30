@@ -411,7 +411,7 @@ public class DefaultFactory implements BeanFactory {
         }
         Field[] fields = superclass.getDeclaredFields();
         for (Field field : fields) {
-            injectField(field, instance);
+            this.injectField(field, instance);
         }
     }
 
@@ -458,7 +458,7 @@ public class DefaultFactory implements BeanFactory {
                     }
                 } else {
                     // 没有@Named注解或未指定名称
-                    if (this.isHasCustomizedAnnotation(field.getAnnotations())){
+                    if (this.isHasCustomizedAnnotation(field.getAnnotations())) {
                         BeanDefinition childBeanDefinition = this.getChildBeanDefinition(field.getType());
                         if (null != childBeanDefinition) {
                             field.set(instance, this.constructBean(childBeanDefinition.getBeanClass()));
@@ -554,6 +554,13 @@ public class DefaultFactory implements BeanFactory {
                 DefaultProvider<Object> provider = new DefaultProvider<>(this, getProviderTypeName(genericClazz, null));
                 if (genericClazz.isAnnotationPresent(Singleton.class)) {
                     provider.setNeedNewBean(false);
+                }
+                if (isHasCustomizedAnnotation(field.getAnnotations())) {
+                    provider.setNeedNewBean(true);
+                    provider.setNeedFindChild(true);
+                } else {
+                    provider.setNeedNewBean(false);
+                    provider.setNeedFindChild(false);
                 }
                 field.set(instance, provider);
             }

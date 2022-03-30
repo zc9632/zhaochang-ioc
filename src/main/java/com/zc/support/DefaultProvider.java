@@ -53,4 +53,8 @@ public class DefaultProvider<T> implements Provider<T> {
     public void setNeedNewBean(boolean needNewBean) {
         isNeedNewBean = needNewBean;
     }
+
+    public void setNeedFindChild(boolean needFindChild) {
+        isNeedFindChild = needFindChild;
+    }
 }
