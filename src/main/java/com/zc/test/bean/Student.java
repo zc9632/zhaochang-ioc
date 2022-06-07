@@ -12,7 +12,6 @@ import lombok.Data;
  * @desc
  */
 @Named
-@Singleton
 @Data
 public class Student {
 

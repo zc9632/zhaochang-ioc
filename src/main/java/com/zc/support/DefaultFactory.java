@@ -4,6 +4,7 @@ import com.zc.annotation.Inject;
 import com.zc.annotation.Named;
 import com.zc.annotation.Provider;
 import com.zc.annotation.Singleton;
+import com.zc.exception.CircularDependencyException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
@@ -42,6 +43,8 @@ public class DefaultFactory implements BeanFactory {
     private final Set<String> beanNames = new HashSet<>(64);
 
     private List<Class<?>> customizedAnnotations;
+
+    private List<Class<?>> cashedBean = new ArrayList<>(32);
 
     public DefaultFactory(List<Class<?>> customizedAnnotations) {
         this.customizedAnnotations = customizedAnnotations;
@@ -95,9 +98,6 @@ public class DefaultFactory implements BeanFactory {
                 bean = constructBean(beanDefinition.getBeanClass());
             }
         }
-        if (null == bean) {
-            log.warn("bean not found, beanName:" + beanName);
-        }
         return bean;
     }
 
@@ -115,6 +115,10 @@ public class DefaultFactory implements BeanFactory {
     }
 
     public Object getNewBean(Class<?> clazz) {
+        if (cashedBean.contains(clazz)){
+            throw new CircularDependencyException("Please use singleton annotation or Provider interface to resolve circularDependency");
+        }
+        cashedBean.add(clazz);
         Object instance = null;
         // 不包含需要创建并注入对应的属性，注入顺序：1.构造方法 2.字段属性 3.方法注入
         // 先构造方法注入
@@ -134,6 +138,7 @@ public class DefaultFactory implements BeanFactory {
         this.fieldsInject(clazz, instance);
         // 普通方法注入(放在前面，后面属性注入如果重复会直接覆盖因为后面重复注入会覆盖)
         this.methodInject(clazz, instance);
+        cashedBean.remove(clazz);
         return instance;
     }
 
@@ -436,7 +441,7 @@ public class DefaultFactory implements BeanFactory {
      * 处理属性上的注解
      *
      * @param field  属性
-     * @param target 该属性的实例
+     * @param instance 该属性的实例
      */
     public void injectField(Field field, Object instance) {
         if (!field.isAnnotationPresent(Inject.class)) {

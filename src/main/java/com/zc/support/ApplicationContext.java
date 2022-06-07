@@ -45,6 +45,7 @@ public class ApplicationContext {
     }
 
     private void init(String... packages) {
+        // 创建文件扫描器
         fileScanner = new FileScanner();
         // 初始化需要扫描的包路径
         fileScanner.addPackages(packages);
@@ -70,13 +71,9 @@ public class ApplicationContext {
     }
 
     private void initBean() {
-        /**
-         * 获取所有被管理的bean
-         */
+        // 获取所有被管理的bean，封装成初始的beanDefinition对象
         List<BeanDefinition> beanDefinitions = this.getNamedAnnotationBeanDefinitions();
-        /**
-         * 初始化beanMap
-         */
+        // 初始化beanMap
         this.initBeans(beanDefinitions);
     }
 
@@ -95,6 +92,7 @@ public class ApplicationContext {
         if (hasInit.contains(beanDefinition)){
             return;
         }
+        hasInit.add(beanDefinition);
         Class<?> beanClass = beanDefinition.getBeanClass();
         Field[] fields = beanClass.getDeclaredFields();
         for (Field field : fields) {
@@ -113,7 +111,6 @@ public class ApplicationContext {
                     if (!hasInit.contains(factory.getBeanDefinition(type))) {
                         // 存在没有初始化则先初始化，然后赋值
                         initBean(factory.getBeanDefinition(type), hasInit);
-
                     }
                     field.set(beanDefinition.getBean(), factory.getBean(type));
                 } else {
@@ -126,7 +123,6 @@ public class ApplicationContext {
                 e.printStackTrace();
             }
         }
-        hasInit.add(beanDefinition);
     }
 
     /**
