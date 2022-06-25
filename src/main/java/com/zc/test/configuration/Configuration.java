@@ -7,6 +7,6 @@ import com.zc.annotation.PackageConfiguration;
  * @Date 2022/3/6.
  * @desc
  */
-@PackageConfiguration(packages = {"com.zc.test.bean"})
+@PackageConfiguration(packages = {"com.zc.test"})
 public class Configuration {
 }

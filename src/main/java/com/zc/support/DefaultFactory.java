@@ -116,7 +116,7 @@ public class DefaultFactory implements BeanFactory {
 
     public Object getNewBean(Class<?> clazz) {
         if (cashedBean.contains(clazz)){
-            throw new CircularDependencyException("Please use singleton annotation or Provider interface to resolve circularDependency");
+            throw new CircularDependencyException("Please use singleton annotation or Provider interface to resolve circularDependency, clazz:" + clazz.getName());
         }
         cashedBean.add(clazz);
         Object instance = null;

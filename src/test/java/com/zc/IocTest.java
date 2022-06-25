@@ -49,14 +49,14 @@ public class IocTest {
     }
 
     /**
-     * 测试是否拿到的是相同的对象
+     * 测试是拿到的是否是相同的对象
      */
     @Test
     public void testSameBean(){
         ApplicationContext ac = new ApplicationContext();
         Student student1 = ac.getBean(Student.class);
         Student student2 = ac.getBean(Student.class);
-        Assert.assertSame(student1, student2);
+        Assert.assertNotSame(student1, student2);
         Assert.assertSame(student1.getAction(), student2.getAction());
     }
 
@@ -68,6 +68,11 @@ public class IocTest {
         ApplicationContext ac = new ApplicationContext();
         TestConfigurationBean bean = ac.getBean(TestConfigurationBean.class);
         Assert.assertNull(bean);
+    }
+
+    @Test
+    public void testCircularDependency(){
+        ApplicationContext ac = new ApplicationContext();
     }
 
     @Test
