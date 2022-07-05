@@ -31,9 +31,7 @@ public class SpringAtInjectTckTests {
 
 	@SuppressWarnings("unchecked")
 	public static Test suite() {
-		ApplicationContext ac = new ApplicationContext();
-//		AnnotatedBeanDefinitionReader bdr = new AnnotatedBeanDefinitionReader(ac);
-//		bdr.setScopeMetadataResolver(new Jsr330ScopeMetadataResolver());
+		ApplicationContext ac = ApplicationContext.createApplicationContext();
 		ac.registerBean(Convertible.class);
 		ac.registerBean(DriversSeat.class);
 		ac.registerBean(Seat.class);

@@ -18,5 +18,9 @@ public class TestObject {
     private SingletonObject singletonObject;
 
     @Inject
-    private CDObject cdObject;
+    private Provider<CDObject> cdObject;
+
+    public Provider<CDObject> getCdObject(){
+        return cdObject;
+    }
 }

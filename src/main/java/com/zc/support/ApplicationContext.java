@@ -21,6 +21,11 @@ import java.util.List;
 public class ApplicationContext {
 
     /**
+     * 单例对象
+     */
+    private static final ApplicationContext context = new ApplicationContext();
+
+    /**
      * 文件扫描
      */
     private FileScanner fileScanner;
@@ -35,12 +40,15 @@ public class ApplicationContext {
      */
     private List<Class<?>> classes;
 
+    public static ApplicationContext createApplicationContext() {
+        return context;
+    }
 
-    public ApplicationContext() {
+    private ApplicationContext() {
         init();
     }
 
-    public ApplicationContext(String... packages) {
+    private ApplicationContext(String... packages) {
         init(packages);
     }
 
@@ -57,6 +65,11 @@ public class ApplicationContext {
         this.initBean();
     }
 
+    /**
+     * 初始化自定义的注解
+     * @param classes
+     * @return
+     */
     private List<Class<?>> initCustomizedAnnotations(List<Class<?>> classes) {
         List<Class<?>> customizedAnnotations = new ArrayList<>();
         for (Class<?> clazz : classes) {
@@ -70,6 +83,9 @@ public class ApplicationContext {
         return customizedAnnotations;
     }
 
+    /**
+     * 初始化bean
+     */
     private void initBean() {
         // 获取所有被管理的bean，封装成初始的beanDefinition对象
         List<BeanDefinition> beanDefinitions = this.getNamedAnnotationBeanDefinitions();
@@ -82,6 +98,7 @@ public class ApplicationContext {
             factory.registerBean(beanDefinition);
         }
         // 初始化bean属性
+        // 因为前面在封装beanDefinition的时候可能会因为初始化的时候map中没有而导致没有给属性赋值
         List<BeanDefinition> hasInit = new ArrayList<>();
         for (BeanDefinition beanDefinition : beanDefinitions) {
             initBean(beanDefinition, hasInit);
@@ -192,8 +209,7 @@ public class ApplicationContext {
                 beanName = namedAnnotation.value();
             }
         }
-        BeanDefinition beanDefinition = null;
-        beanDefinition = new BeanDefinition(beanName, factory.constructBean(clazz), clazz);
+        BeanDefinition beanDefinition = new BeanDefinition(beanName, factory.constructBean(clazz), clazz);
         Singleton singleton = clazz.getAnnotation(Singleton.class);
         if (null != singleton) {
             // 设置作用域为单例

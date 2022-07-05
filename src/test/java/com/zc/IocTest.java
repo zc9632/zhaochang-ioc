@@ -1,25 +1,20 @@
 package com.zc;
 
-import com.zc.annotation.Inject;
-import com.zc.annotation.Provider;
 import com.zc.support.ApplicationContext;
-import com.zc.support.DefaultFactory;
-import com.zc.support.DefaultProvider;
-import com.zc.test.bean.Action;
 import com.zc.test.bean.Student;
-import com.zc.test.bean.tck.auto.Engine;
-import com.zc.test.bean.tck.auto.Seat;
-import com.zc.test.bean.tck.auto.V8Engine;
-import com.zc.test.bean.tck.auto.accessories.Cupholder;
-import com.zc.test.bean.tck.auto.accessories.SpareTire;
+import com.zc.test.circulardependency.A;
+import com.zc.test.circulardependency.B;
+import com.zc.test.circulardependency.CDObject;
+import com.zc.test.circulardependency.ProviderA;
+import com.zc.test.circulardependency.SingletonB;
+import com.zc.test.circulardependency.TestObject;
 import com.zc.test.configuration.TestConfigurationBean;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 
 /**
  * @author zhaochang.
@@ -33,7 +28,7 @@ public class IocTest {
      */
     @Test
     public void testBeanGenerate(){
-        ApplicationContext ac = new ApplicationContext();
+        ApplicationContext ac = ApplicationContext.createApplicationContext();
         ac.printBeans();
     }
 
@@ -42,7 +37,7 @@ public class IocTest {
      */
     @Test
     public void testGetStudent(){
-        ApplicationContext ac = new ApplicationContext();
+        ApplicationContext ac = ApplicationContext.createApplicationContext();
         Student student = ac.getBean(Student.class);
         log.info("student:{}", student);
         Assert.assertNotNull(student.getAction());
@@ -53,7 +48,7 @@ public class IocTest {
      */
     @Test
     public void testSameBean(){
-        ApplicationContext ac = new ApplicationContext();
+        ApplicationContext ac = ApplicationContext.createApplicationContext();
         Student student1 = ac.getBean(Student.class);
         Student student2 = ac.getBean(Student.class);
         Assert.assertNotSame(student1, student2);
@@ -65,22 +60,38 @@ public class IocTest {
      */
     @Test
     public void testPackageConfiguration(){
-        ApplicationContext ac = new ApplicationContext();
+        ApplicationContext ac = ApplicationContext.createApplicationContext();
         TestConfigurationBean bean = ac.getBean(TestConfigurationBean.class);
         Assert.assertNull(bean);
     }
 
-    @Test
-    public void testCircularDependency(){
-        ApplicationContext ac = new ApplicationContext();
+    @Ignore
+    @Test(expected = ExceptionInInitializerError.class)
+    public void testCircularDependency() {
+        ApplicationContext ac = ApplicationContext.createApplicationContext();
     }
 
     @Test
-    public void zcTest() throws InvocationTargetException, InstantiationException, IllegalAccessException, NoSuchMethodException {
-        Object instance = SpareTire.class.getDeclaredConstructors()[0].newInstance(null, null);
-        Method injectPublicMethod = SpareTire.class.getSuperclass().getDeclaredMethod("injectPublicMethod");
-        injectPublicMethod.setAccessible(true);
-        injectPublicMethod.invoke(instance);
+    public void testProviderCD(){
+        ApplicationContext ac = ApplicationContext.createApplicationContext();
+        ac.getBean(ProviderA.class);
+        ac.getBean(A.class);
+    }
+
+    @org.junit.Test
+    public void testSingletonCD(){
+        ApplicationContext ac = ApplicationContext.createApplicationContext();
+        ac.getBean(SingletonB.class);
+        ac.getBean(B.class);
+    }
+
+    @Test
+    public void testProviderGetSameObject(){
+        ApplicationContext ac = ApplicationContext.createApplicationContext();
+        TestObject testObject = ac.getBean(TestObject.class);
+        CDObject cdObject1 = testObject.getCdObject().get();
+        CDObject cdObject2 = testObject.getCdObject().get();
+        Assert.assertNotSame(cdObject1, cdObject2);
     }
 
     @Data

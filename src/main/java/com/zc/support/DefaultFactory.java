@@ -35,22 +35,29 @@ public class DefaultFactory implements BeanFactory {
      * bean map
      */
     private final Map<String, BeanDefinition> beanDefinitionMap = new ConcurrentHashMap<>(64);
+
     /**
      * key：bean类型 value：bean名称
      */
     private final Map<Class<?>, String> beanTypeMap = new ConcurrentHashMap<>(64);
 
+    /**
+     * bean名称
+     */
     private final Set<String> beanNames = new HashSet<>(64);
 
+    /**
+     * 自定义注解
+     */
     private List<Class<?>> customizedAnnotations;
 
+    /**
+     * bean缓存，处理循环依赖
+     */
     private List<Class<?>> cashedBean = new ArrayList<>(32);
 
     public DefaultFactory(List<Class<?>> customizedAnnotations) {
         this.customizedAnnotations = customizedAnnotations;
-    }
-
-    public DefaultFactory() {
     }
 
     @Override
@@ -58,6 +65,11 @@ public class DefaultFactory implements BeanFactory {
         return getBeanByName(name);
     }
 
+    /**
+     * 根据类型获取bean
+     * @param requiredType
+     * @return
+     */
     @Override
     public Object getBean(Class<?> requiredType) {
         String beanName = checkInterface(requiredType);
@@ -67,6 +79,11 @@ public class DefaultFactory implements BeanFactory {
         return getBeanByName(beanName);
     }
 
+    /**
+     * 校验是否是接口并返回对应的bean名称
+     * @param requiredType
+     * @return
+     */
     private String checkInterface(Class<?> requiredType) {
         if (requiredType.isInterface()) {
             // 需要获取他的实现类
@@ -136,7 +153,7 @@ public class DefaultFactory implements BeanFactory {
         this.parentMethodsInject(clazz, instance);
         // 属性注入
         this.fieldsInject(clazz, instance);
-        // 普通方法注入(放在前面，后面属性注入如果重复会直接覆盖因为后面重复注入会覆盖)
+        // 普通方法注入
         this.methodInject(clazz, instance);
         cashedBean.remove(clazz);
         return instance;
@@ -146,42 +163,8 @@ public class DefaultFactory implements BeanFactory {
 //        List<Method> overrideMethods = getParentOverrideMethods(clazz);
         Method[] methods = clazz.getDeclaredMethods();
         for (Method method : methods) {
-//            if (method.isAnnotationPresent(Inject.class)) {
-//                // 当有注解的时候先查父类，否则不管父类
-//                Method parentMethod = getParentMethod(method, clazz);
-//                if (null != parentMethod){
-//                    int modifiers = method.getModifiers();
-//                    if (!Modifier.isPublic(modifiers) && !Modifier.isAbstract(modifiers) && !Modifier.isPrivate(modifiers)){
-//                        this.injectMethod(parentMethod, instance);
-//                    }
-//                }
-//            }
-            // 如果不为null说明已经通过其它方式注入了
             this.injectMethod(method, instance);
         }
-    }
-
-    private Method getParentMethod(Method method, Class<?> clazz) {
-        Method[] parentDeclaredMethods = clazz.getSuperclass().getDeclaredMethods();
-        for (Method pMethod : parentDeclaredMethods) {
-            if (pMethod.getName().equals(method.getName()) && pMethod.getReturnType().equals(method.getReturnType())) {
-                Class<?>[] pTypes = pMethod.getParameterTypes();
-                Class<?>[] cTypes = method.getParameterTypes();
-                if (pTypes.length == cTypes.length) {
-                    boolean isEqual = true;
-                    for (int i = 0; i < pTypes.length; i++) {
-                        if (!pTypes[i].equals(cTypes[i])) {
-                            isEqual = false;
-                            break;
-                        }
-                    }
-                    if (isEqual) {
-                        return pMethod;
-                    }
-                }
-            }
-        }
-        return null;
     }
 
     private void parentMethodsInject(Class<?> clazz, Object instance) {
@@ -195,9 +178,11 @@ public class DefaultFactory implements BeanFactory {
         for (Method method : methods) {
             int modifiers = method.getModifiers();
             if (overrideMethods.contains(method) && Modifier.isPublic(modifiers)) {
+                // 子类重写的方法子类优先，其余方法父类优先
                 continue;
             }
             if (!Modifier.isProtected(modifiers)) {
+                // 受保护的方法不会执行，单测中有案例
                 this.injectMethod(method, instance);
             }
         }
@@ -272,10 +257,6 @@ public class DefaultFactory implements BeanFactory {
                     objects[index] = constructBean(parameterType);
                 }
             } else {
-//                // 如果包含
-//                if (shouldInject){
-//                    provider.setNeedNewBean(true);
-//                }
                 objects[index] = provider;
             }
             index++;
@@ -289,7 +270,9 @@ public class DefaultFactory implements BeanFactory {
                 ParameterizedType parameterizedType = (ParameterizedType) genericParameterType;
                 Class<?> genericClazz = (Class<?>) parameterizedType.getActualTypeArguments()[0];
                 DefaultProvider<Object> provider = new DefaultProvider<>(this, getProviderTypeName(genericClazz, annotations));
+                // 实例化的时候是否需要创建新实例
                 boolean isProviderNeedNewBean = this.isProviderNeedNewBean(genericClazz, classEnum, annotations);
+                // 是否有自定义注解
                 boolean isProviderNeedFindChild = this.isHasCustomizedAnnotation(annotations);
                 provider.setNeedNewBean(isProviderNeedNewBean);
                 provider.setNeedNewBean(isProviderNeedFindChild);
@@ -548,10 +531,7 @@ public class DefaultFactory implements BeanFactory {
         Type genericType = field.getGenericType();
         try {
             field.setAccessible(true);
-//            if (null != field.get(instance)) {
-//                // 如果已经初始化直接返回
-//                return;
-//            }
+//          // 获取泛型里的类型
             if (genericType instanceof ParameterizedType) {
                 ParameterizedType parameterizedType = (ParameterizedType) genericType;
                 Class<?> genericClazz = (Class<?>) parameterizedType.getActualTypeArguments()[0];
@@ -622,6 +602,11 @@ public class DefaultFactory implements BeanFactory {
         return isChild;
     }
 
+    /**
+     * 获取bean容器管理的子类
+     * @param beanClass 父类等于这种类型
+     * @return
+     */
     public BeanDefinition getChildBeanDefinition(Class<?> beanClass) {
         for (BeanDefinition beanDefinition : beanDefinitionMap.values()) {
             Class<?> superclass = beanDefinition.getBeanClass().getSuperclass();
