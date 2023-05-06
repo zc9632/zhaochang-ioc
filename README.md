@@ -1,1 +1,1 @@
-![JSR330 IOC bean管理流程](docs/JSR330IOCbean管理流程.jpg)
+![JSR330 IOC bean管理流程](docs/JSR330IOC.png)
